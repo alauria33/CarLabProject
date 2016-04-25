@@ -15,6 +15,9 @@
 		9D2F71F01CBB44F8000329B3 /* CarLabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D2F71EF1CBB44F8000329B3 /* CarLabTests.swift */; };
 		9D2F71FB1CBB44F8000329B3 /* CarLabUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D2F71FA1CBB44F8000329B3 /* CarLabUITests.swift */; };
 		9D8D89601CC1D1A80039E4B0 /* MjpegStreamingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D8D895F1CC1D1A80039E4B0 /* MjpegStreamingController.swift */; };
+		9D9EA5FB1CC9502100D2179E /* ysocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D9EA5FA1CC9502100D2179E /* ysocket.swift */; };
+		9D9EA5FD1CC9504A00D2179E /* ytcpsocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D9EA5FC1CC9504A00D2179E /* ytcpsocket.swift */; };
+		9D9EA6011CC9508E00D2179E /* ytcpsocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 9D9EA5FF1CC9508E00D2179E /* ytcpsocket.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -49,6 +52,11 @@
 		9D2F71FA1CBB44F8000329B3 /* CarLabUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarLabUITests.swift; sourceTree = "<group>"; };
 		9D2F71FC1CBB44F8000329B3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		9D8D895F1CC1D1A80039E4B0 /* MjpegStreamingController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MjpegStreamingController.swift; sourceTree = "<group>"; };
+		9D9EA5FA1CC9502100D2179E /* ysocket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ysocket.swift; sourceTree = "<group>"; };
+		9D9EA5FC1CC9504A00D2179E /* ytcpsocket.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ytcpsocket.swift; sourceTree = "<group>"; };
+		9D9EA5FE1CC9508E00D2179E /* CarLab-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "CarLab-Bridging-Header.h"; sourceTree = "<group>"; };
+		9D9EA5FF1CC9508E00D2179E /* ytcpsocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ytcpsocket.c; sourceTree = "<group>"; };
+		9D9EA6001CC9508E00D2179E /* ytcpsocket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ytcpsocket.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -100,12 +108,17 @@
 			isa = PBXGroup;
 			children = (
 				9D2F71DA1CBB44F8000329B3 /* AppDelegate.swift */,
-				9D2F71DC1CBB44F8000329B3 /* ViewController.swift */,
 				9D8D895F1CC1D1A80039E4B0 /* MjpegStreamingController.swift */,
+				9D2F71DC1CBB44F8000329B3 /* ViewController.swift */,
+				9D9EA5FA1CC9502100D2179E /* ysocket.swift */,
+				9D9EA5FC1CC9504A00D2179E /* ytcpsocket.swift */,
+				9D9EA5FF1CC9508E00D2179E /* ytcpsocket.c */,
+				9D9EA6001CC9508E00D2179E /* ytcpsocket.h */,
 				9D2F71DE1CBB44F8000329B3 /* Main.storyboard */,
 				9D2F71E11CBB44F8000329B3 /* Assets.xcassets */,
 				9D2F71E31CBB44F8000329B3 /* LaunchScreen.storyboard */,
 				9D2F71E61CBB44F8000329B3 /* Info.plist */,
+				9D9EA5FE1CC9508E00D2179E /* CarLab-Bridging-Header.h */,
 			);
 			path = CarLab;
 			sourceTree = "<group>";
@@ -262,7 +275,10 @@
 			files = (
 				9D2F71DD1CBB44F8000329B3 /* ViewController.swift in Sources */,
 				9D8D89601CC1D1A80039E4B0 /* MjpegStreamingController.swift in Sources */,
+				9D9EA5FB1CC9502100D2179E /* ysocket.swift in Sources */,
 				9D2F71DB1CBB44F8000329B3 /* AppDelegate.swift in Sources */,
+				9D9EA6011CC9508E00D2179E /* ytcpsocket.c in Sources */,
+				9D9EA5FD1CC9504A00D2179E /* ytcpsocket.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -404,6 +420,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				INFOPLIST_FILE = CarLab/Info.plist;
@@ -412,6 +429,9 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.kuoterrence;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
+				SWIFT_OBJC_BRIDGING_HEADER = "CarLab/CarLab-Bridging-Header.h";
+				SWIFT_OBJC_INTERFACE_HEADER_NAME = "";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
 		};
@@ -419,6 +439,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				INFOPLIST_FILE = CarLab/Info.plist;
@@ -427,6 +448,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.kuoterrence;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
+				SWIFT_OBJC_BRIDGING_HEADER = "CarLab/CarLab-Bridging-Header.h";
+				SWIFT_OBJC_INTERFACE_HEADER_NAME = "";
 			};
 			name = Release;
 		};
