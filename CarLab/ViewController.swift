@@ -377,8 +377,12 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
     
     
     func grabbingSpeedSlider(sender:UISlider!) {
-        speedLabel.text = String(format: "%.1f ft/sec", sender.value*5)
-        
+        if (sender.value > 0.1) {
+            speedLabel.text = String(format: "%.1f ft/sec", 1.5 + (sender.value-0.1)*7.22222)
+        }
+        else {
+            speedLabel.text = String(format: "%.1f ft/sec", 0.0)
+        }
         if !disconnected {
             if (pastSpeedVal - speedSlider.value > 0.02 || pastSpeedVal - speedSlider.value < -0.02) {
                 let speedVal = Int(((speedSlider.value) * 253) + 1)
