@@ -9,7 +9,7 @@ String command = "none";
 String device = "none";
 String value = "none";
 String maybe = "none";
-
+                           
 Servo xServo;  // create servo object to control a servo
 Servo yServo;  // create servo object to control a servo
 
@@ -24,6 +24,11 @@ YunServer server(5678);
 void setup() {
   Serial.begin(9600);
 
+  xServo.write(90);
+  yServo.write(75);
+  analogWrite(speedPin, 1);
+  analogWrite(steeringPin, 198.9);
+    
   // Bridge startup
   pinMode(13, OUTPUT);
   digitalWrite(13, LOW);
@@ -36,11 +41,6 @@ void setup() {
   xServo.attach(xServoPin);
   yServo.attach(yServoPin);
 
-  xServo.write(90);
-  yServo.write(75);
-  analogWrite(speedPin, 1);
-  analogWrite(steeringPin, 198.9);
-
 }
 
 void loop() {
@@ -50,14 +50,14 @@ void loop() {
   if (client) {
     Serial.println("found client");
     client.setTimeout(5);
-    while (!command.equals("stop") && client.connected()) {
+    while (!device.equals("stop") && !value.equals("stop") && client.connected()) {
       if (client.available() > 0) {
         device = client.readStringUntil('/');
         value = client.readStringUntil('/');
         //Serial.println(device + " , " + value);
         if (device.equals("x")) {
           Serial.println("xServo: " + value);
-          //xServo.write(value.toInt());
+          xServo.write(value.toInt());
         }
         else if (device.equals("y")) {
           yServo.write(value.toInt());
@@ -76,6 +76,8 @@ void loop() {
     digitalWrite(13, HIGH);
     Serial.println("stopping");
     command = "";
+    device = "";
+    value = "";
     client.stop();
     xServo.write(90);
     yServo.write(75);
@@ -83,6 +85,10 @@ void loop() {
     analogWrite(steeringPin, 198.9);
   }
   else {
+    xServo.write(90);
+    yServo.write(75);
+    analogWrite(speedPin, 1);
+    analogWrite(steeringPin, 198.9);
     //Serial.println("no client found");
   }
 }
