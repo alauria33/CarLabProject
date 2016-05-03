@@ -18,6 +18,9 @@
 		9D9EA5FB1CC9502100D2179E /* ysocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D9EA5FA1CC9502100D2179E /* ysocket.swift */; };
 		9D9EA5FD1CC9504A00D2179E /* ytcpsocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D9EA5FC1CC9504A00D2179E /* ytcpsocket.swift */; };
 		9D9EA6011CC9508E00D2179E /* ytcpsocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 9D9EA5FF1CC9508E00D2179E /* ytcpsocket.c */; };
+		9DC13D681CD2E6E80015675B /* MenuViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC13D671CD2E6E80015675B /* MenuViewController.swift */; };
+		9DC13D6A1CD2E7610015675B /* DriveViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC13D691CD2E7610015675B /* DriveViewController.swift */; };
+		9DC13D6C1CD2F2630015675B /* VRViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC13D6B1CD2F2630015675B /* VRViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,6 +60,9 @@
 		9D9EA5FE1CC9508E00D2179E /* CarLab-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "CarLab-Bridging-Header.h"; sourceTree = "<group>"; };
 		9D9EA5FF1CC9508E00D2179E /* ytcpsocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ytcpsocket.c; sourceTree = "<group>"; };
 		9D9EA6001CC9508E00D2179E /* ytcpsocket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ytcpsocket.h; sourceTree = "<group>"; };
+		9DC13D671CD2E6E80015675B /* MenuViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MenuViewController.swift; sourceTree = "<group>"; };
+		9DC13D691CD2E7610015675B /* DriveViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DriveViewController.swift; sourceTree = "<group>"; };
+		9DC13D6B1CD2F2630015675B /* VRViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VRViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,11 +115,14 @@
 			children = (
 				9D2F71DA1CBB44F8000329B3 /* AppDelegate.swift */,
 				9D8D895F1CC1D1A80039E4B0 /* MjpegStreamingController.swift */,
-				9D2F71DC1CBB44F8000329B3 /* ViewController.swift */,
 				9D9EA5FA1CC9502100D2179E /* ysocket.swift */,
-				9D9EA5FC1CC9504A00D2179E /* ytcpsocket.swift */,
 				9D9EA5FF1CC9508E00D2179E /* ytcpsocket.c */,
 				9D9EA6001CC9508E00D2179E /* ytcpsocket.h */,
+				9D2F71DC1CBB44F8000329B3 /* ViewController.swift */,
+				9DC13D6B1CD2F2630015675B /* VRViewController.swift */,
+				9DC13D671CD2E6E80015675B /* MenuViewController.swift */,
+				9DC13D691CD2E7610015675B /* DriveViewController.swift */,
+				9D9EA5FC1CC9504A00D2179E /* ytcpsocket.swift */,
 				9D2F71DE1CBB44F8000329B3 /* Main.storyboard */,
 				9D2F71E11CBB44F8000329B3 /* Assets.xcassets */,
 				9D2F71E31CBB44F8000329B3 /* LaunchScreen.storyboard */,
@@ -276,9 +285,12 @@
 				9D2F71DD1CBB44F8000329B3 /* ViewController.swift in Sources */,
 				9D8D89601CC1D1A80039E4B0 /* MjpegStreamingController.swift in Sources */,
 				9D9EA5FB1CC9502100D2179E /* ysocket.swift in Sources */,
+				9DC13D681CD2E6E80015675B /* MenuViewController.swift in Sources */,
 				9D2F71DB1CBB44F8000329B3 /* AppDelegate.swift in Sources */,
+				9DC13D6A1CD2E7610015675B /* DriveViewController.swift in Sources */,
 				9D9EA6011CC9508E00D2179E /* ytcpsocket.c in Sources */,
 				9D9EA5FD1CC9504A00D2179E /* ytcpsocket.swift in Sources */,
+				9DC13D6C1CD2F2630015675B /* VRViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

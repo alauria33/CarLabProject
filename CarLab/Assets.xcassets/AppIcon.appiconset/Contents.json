@@ -3,13 +3,13 @@
     {
       "size" : "29x29",
       "idiom" : "iphone",
-      "filename" : "icon.png",
+      "filename" : "caricon.png",
       "scale" : "2x"
     },
     {
       "size" : "29x29",
       "idiom" : "iphone",
-      "filename" : "icon-3.png",
+      "filename" : "caricon-1.png",
       "scale" : "3x"
     },
     {
@@ -25,13 +25,13 @@
     {
       "size" : "60x60",
       "idiom" : "iphone",
-      "filename" : "icon-1.png",
+      "filename" : "caricon-2.png",
       "scale" : "2x"
     },
     {
       "size" : "60x60",
       "idiom" : "iphone",
-      "filename" : "icon-2.png",
+      "filename" : "caricon-3.png",
       "scale" : "3x"
     }
   ],

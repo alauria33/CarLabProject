@@ -72,7 +72,6 @@ public class MjpegStreamingController: NSObject, NSURLSessionDataDelegate {
     // MARK: - NSURLSessionDataDelegate
     
     public func URLSession(session: NSURLSession, dataTask: NSURLSessionDataTask, didReceiveResponse response: NSURLResponse, completionHandler: (NSURLSessionResponseDisposition) -> Void) {
-        print("received response")
         if let imageData = receivedData where imageData.length > 0,
             let receivedImage = UIImage(data: imageData) {
             // I'm creating the UIImage before performing didFinishLoading to minimize the interval
@@ -90,7 +89,6 @@ public class MjpegStreamingController: NSObject, NSURLSessionDataDelegate {
     }
     
     public func URLSession(session: NSURLSession, dataTask: NSURLSessionDataTask, didReceiveData data: NSData) {
-        print("received data")
         receivedData?.appendData(data)
     }
     
