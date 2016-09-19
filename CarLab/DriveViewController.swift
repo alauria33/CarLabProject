@@ -1,5 +1,5 @@
 //
-//  ViewController.swift
+//  DriveViewController.swift
 //  CarLab
 //
 //  Created by Andrew on 4/10/16.
@@ -10,6 +10,9 @@ import UIKit
 import CoreMotion
 import CoreLocation
 import Foundation
+import AVFoundation
+import MediaPlayer
+import AudioToolbox
 
 let autoStart = true
 
@@ -17,9 +20,12 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
     
     let loadingIndicator: UIActivityIndicatorView = UIActivityIndicatorView()
     
+    let deepRed = UIColor(red: 208/255, green: 80/255, blue: 80/255, alpha: 1.0)
+
     let videoImage: UIImageView = UIImageView()
     var streamingController: MjpegStreamingController!
-    let videoUrl = NSURL(string: "http://10.9.146.228:8080/?action=stream")
+    //let videoUrl = NSURL(string: "http://10.9.146.228:8080/?action=stream")
+    let videoUrl = NSURL(string: "http://192.168.240.1:8080/?action=stream")
     
     var HTMLString: String = String()
     
@@ -65,6 +71,28 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
     
     var tilt: Double = 0.0
     
+    var orientationDiff: CLLocationDirection = CLLocationDirection()
+    var zGravity: Double = Double()
+    
+    var startVolume: Float = Float()
+    let volumeView = MPVolumeView()
+
+    let alertImg: UIImageView = UIImageView()
+    let blinkImg: UIImageView = UIImageView()
+    
+    var allowVibration: Bool = true
+    var animateTimer: NSTimer = NSTimer()
+    var vibrationTimer: NSTimer = NSTimer()
+    var blinkTimer: NSTimer = NSTimer()
+    var vibrationCount: Int = 0
+    var alertCount: Int = 0
+    
+    var centerLabel: UILabel = UILabel()
+
+    let reverseButton: UIButton = UIButton()
+
+    var inReverse: Bool = false
+    
     //******************
     // lifecycle methods
     //******************
@@ -75,11 +103,23 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
 
         self.view.backgroundColor = UIColor.whiteColor()//deepRed
         
+        // set up volume rockers
+        let volumeView: MPVolumeView = MPVolumeView()
+        volumeView.hidden = false
+        volumeView.sizeToFit()
+        volumeView.frame = CGRectMake(screenSize.width, screenSize.height, 0, 0)
+        self.view.addSubview(volumeView)
+        
+        // Notify when entering and leaving app
         NSNotificationCenter.defaultCenter().addObserver(self, selector: Selector("leavingApp:"), name:UIApplicationDidEnterBackgroundNotification, object: nil)
         NSNotificationCenter.defaultCenter().addObserver(self, selector: Selector("leavingApp:"), name:UIApplicationWillTerminateNotification, object: nil)
         NSNotificationCenter.defaultCenter().addObserver(self, selector: Selector("enterApp:"), name:UIApplicationDidBecomeActiveNotification, object: nil)
         
-        // Video
+        // timers to update servos and read from ping
+        let servoTimer = NSTimer.scheduledTimerWithTimeInterval(0.05, target: self, selector: "updateServos", userInfo: nil, repeats: true)
+        let readTimer = NSTimer.scheduledTimerWithTimeInterval(0.2, target: self, selector: "readData", userInfo: nil, repeats: true)
+        
+        // Video feed image
         let videoSize = 1
         if videoSize == 0 {
             videoImage.frame.size.height = screenSize.height
@@ -93,11 +133,14 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         videoImage.frame.origin.x = (screenSize.width - videoImage.frame.size.width)*0.5
         videoImage.frame.origin.y = (screenSize.height - videoImage.frame.size.height)*0.5
         self.view.addSubview(videoImage)
+        //videoImage.image = UIImage(named: "road")
         
         streamingController = MjpegStreamingController(imageView: videoImage)
         
+        // auto start connections on boot up
         if autoStart {
-            client = TCPClient(addr: "10.9.146.228", port: 5678)
+            //client = TCPClient(addr: "10.9.146.228", port: 5678)
+            client = TCPClient(addr: "192.168.240.1", port: 5678)
             // connect socket
             var (success, errmsg) = client.connect(timeout: 10)
             print("connect success: \(success)")
@@ -108,12 +151,6 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
             streamingController.play(url: videoUrl!)
         }
         
-        loadingIndicator.frame = CGRectMake(0, 0, screenSize.width * 0.4, screenSize.width * 0.4)
-        loadingIndicator.frame.origin.x = (screenSize.width - loadingIndicator.frame.size.width)*0.5
-        loadingIndicator.frame.origin.y = (screenSize.height - loadingIndicator.frame.size.height)*0.5
-        loadingIndicator.transform = CGAffineTransformMakeScale(5, 5)
-        //self.view.addSubview(loadingIndicator)
-        
         streamingController.didStartLoading = { [unowned self] in
             self.loadingIndicator.hidden = false
             self.loadingIndicator.startAnimating()
@@ -123,22 +160,13 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
             self.loadingIndicator.hidden = true
         }
         
+        // read accelerometers and gyroscopes
         motionManager = CMMotionManager()
         motionManager.startAccelerometerUpdates()
         motionManager.startGyroUpdates()
         // vertical motion
         let handler: CMDeviceMotionHandler = {(motion: CMDeviceMotion?, error: NSError?) -> Void in
-            var ard = (1 - (motion?.gravity.z)!) * 75
-            ard = round(100 * ard) / 100
-            //self.accelImg.frame.origin.y = -self.accelImg.frame.size.height/2 + CGFloat(ard)/150 * screenSize.height
-            if !self.disconnected {
-                if (ard - self.pastYServoVal > 1 || ard - self.pastYServoVal < -1) {
-                    var (sendSuccess, sendErrmsg) = self.client.send(str:"y/\(ard)/")
-                    self.pastYServoVal = ard
-                }
-            }
-            self.quaternion = motion!.attitude.quaternion
-            self.tilt = motion!.gravity.y
+            self.zGravity = (motion?.gravity.z)!
         }
         
         // check if accelerometer and gyro are available
@@ -148,6 +176,7 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
             motionManager.startDeviceMotionUpdatesToQueue(NSOperationQueue.currentQueue()!, withHandler: handler)
         }
         
+        // set up compass readings
         lm = CLLocationManager()
         lm.headingOrientation = CLDeviceOrientation.LandscapeLeft
         lm.delegate = self
@@ -156,47 +185,38 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         
         // refresh button
         let refreshOrientation = UIButton(type: UIButtonType.System) as UIButton
+        refreshOrientation.backgroundColor = UIColor.whiteColor()
         refreshOrientation.titleLabel!.font = UIFont(name: "ChalkboardSE-Bold", size: 14)
         refreshOrientation.frame = CGRectMake(0, 0, screenSize.width * 0.12, screenSize.height * 0.09)
         refreshOrientation.frame.origin.x = (screenSize.width - refreshOrientation.frame.size.width)*0.96
         refreshOrientation.frame.origin.y = (screenSize.height - refreshOrientation.frame.size.height)*0.1
         refreshOrientation.setTitle("Refresh", forState: UIControlState.Normal)
         let lightBlueColor = UIColor(red: 50/255, green: 70/255, blue: 147/255, alpha: 1.0)
-        refreshOrientation.setTitleColor(lightBlueColor, forState: UIControlState.Normal)
+        refreshOrientation.setTitleColor(deepRed, forState: UIControlState.Normal)
         refreshOrientation.addTarget(self, action: "refreshAction:", forControlEvents: UIControlEvents.TouchUpInside)
+        refreshOrientation.layer.cornerRadius = 10
         self.view.addSubview(refreshOrientation)
         
-        // refresh button
-        let startButton = UIButton(type: UIButtonType.System) as UIButton
-        startButton.titleLabel!.font = UIFont(name: "ChalkboardSE-Bold", size: 14)
-        startButton.frame = CGRectMake(0, 0, screenSize.width * 0.12, screenSize.height * 0.09)
-        startButton.frame.origin.x = (screenSize.width - startButton.frame.size.width)*0.8
-        startButton.frame.origin.y = (screenSize.height - startButton.frame.size.height)*0.1
-        startButton.setTitle("Start", forState: UIControlState.Normal)
-        startButton.setTitleColor(lightBlueColor, forState: UIControlState.Normal)
-        startButton.addTarget(self, action: "startConnection:", forControlEvents: UIControlEvents.TouchUpInside)
-        self.view.addSubview(startButton)
-        
-        // refresh button
-        let stopButton = UIButton(type: UIButtonType.System) as UIButton
-        stopButton.titleLabel!.font = UIFont(name: "ChalkboardSE-Bold", size: 14)
-        stopButton.frame = CGRectMake(0, 0, screenSize.width * 0.12, screenSize.height * 0.09)
-        stopButton.frame.origin.x = (screenSize.width - stopButton.frame.size.width)*0.7
-        stopButton.frame.origin.y = (screenSize.height - stopButton.frame.size.height)*0.1
-        stopButton.setTitle("Stop", forState: UIControlState.Normal)
-        stopButton.setTitleColor(lightBlueColor, forState: UIControlState.Normal)
-        stopButton.addTarget(self, action: "stopConnection:", forControlEvents: UIControlEvents.TouchUpInside)
-        self.view.addSubview(stopButton)
-        
+        // back button
         let backArrow = UIButton(type: UIButtonType.System) as UIButton
-        backArrow.frame = CGRectMake(0, 0, screenSize.width * 0.12, screenSize.width * 0.12)
-        backArrow.frame.origin.x = (screenSize.width - stopButton.frame.size.width)*0.04
-        backArrow.frame.origin.y = (screenSize.height - stopButton.frame.size.height)*0.04
+        backArrow.frame = CGRectMake(0, 0, screenSize.width * 0.10, screenSize.height * 0.09)
+        backArrow.frame.origin.x = (screenSize.width - backArrow.frame.size.width)*0.04
+        backArrow.frame.origin.y = (screenSize.height - backArrow.frame.size.height)*0.1
         backArrow.setImage(UIImage(named: "leftarrow.png"), forState: UIControlState.Normal)
         backArrow.addTarget(self, action: "back:", forControlEvents: UIControlEvents.TouchUpInside)
         backArrow.setTitleColor(UIColor.blackColor(), forState: UIControlState.Normal)
-        backArrow.tintColor = UIColor.blackColor()
+        backArrow.tintColor = deepRed
+        backArrow.backgroundColor = UIColor.whiteColor()
+        backArrow.layer.cornerRadius = 10
         self.view.addSubview(backArrow)
+        
+        // reverse driving button
+        reverseButton.frame = CGRectMake(0, 0, screenSize.width * 0.1, screenSize.width * 0.1)
+        reverseButton.frame.origin.x = (screenSize.width - reverseButton.frame.size.width)*0.685
+        reverseButton.frame.origin.y = (screenSize.height - reverseButton.frame.size.height)*0.95
+        reverseButton.setImage(UIImage(named: "reverse1"), forState: UIControlState.Normal)
+        reverseButton.addTarget(self, action: "reverseAction:", forControlEvents: UIControlEvents.TouchUpInside)
+        self.view.addSubview(reverseButton)
         
         // steering slider
         steeringSlider.frame.size.width = screenSize.width*0.4
@@ -209,7 +229,6 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         steeringSlider.maximumTrackTintColor = UIColor.lightGrayColor()
         steeringSlider.minimumTrackTintColor = UIColor.lightGrayColor()
         self.view.addSubview(steeringSlider)
-        
         steeringImg.frame = CGRectMake(0, 0, steeringSlider.frame.size.width*0.15, steeringSlider.frame.size.width * 0.15)
         steeringImg.frame.origin.x = steeringSlider.frame.origin.x + steeringSlider.frame.size.width + steeringImg.frame.width/10
         steeringImg.frame.origin.y = (steeringSlider.frame.origin.y - steeringSlider.frame.height/4)
@@ -224,46 +243,51 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         speedSlider.addTarget(self, action: "grabbingSpeedSlider:", forControlEvents: UIControlEvents.TouchDragInside)
         speedSlider.addTarget(self, action: "releaseSpeedSlider:", forControlEvents: UIControlEvents.TouchUpInside)
         speedSlider.addTarget(self, action: "releaseSpeedSlider:", forControlEvents: UIControlEvents.TouchUpOutside)
-        speedSlider.minimumTrackTintColor = UIColor.purpleColor()
+        speedSlider.minimumTrackTintColor = deepRed
         speedSlider.maximumTrackTintColor = UIColor.lightGrayColor()
         self.view.addSubview(speedSlider)
-        
         speedLabel.text = "0.0 ft/sec"
+        speedLabel.textAlignment = .Center
         speedLabel.font = UIFont(name: "Menlo", size: 18)
-        speedLabel.frame = CGRectMake(0, 0, screenSize.width*0.2, screenSize.height * 0.15)
-        speedLabel.frame.origin.x = speedSlider.frame.origin.x - speedSlider.frame.size.width
-        speedLabel.frame.origin.y = speedSlider.frame.origin.y + speedSlider.frame.size.height/2 + screenSize.height/3.7
+        speedLabel.frame = CGRectMake(0, 0, screenSize.width*0.2, screenSize.height * 0.10)
+        speedLabel.frame.origin.x = speedSlider.frame.origin.x - speedSlider.frame.size.width*1.4
+        speedLabel.frame.origin.y = speedSlider.frame.origin.y + speedSlider.frame.size.height/2 + screenSize.height/3.2
+        speedLabel.backgroundColor = UIColor.whiteColor()
+        speedLabel.textColor = deepRed
+        speedLabel.layer.masksToBounds = true
+        speedLabel.layer.cornerRadius = 10
         self.view.addSubview(speedLabel)
         
-        accelImg.frame = CGRectMake(0, 0, screenSize.width*0.06, screenSize.width * 0.06)
-        accelImg.frame.origin.x = (screenSize.width - accelImg.frame.size.width)*0.5
-        accelImg.frame.origin.y = (screenSize.height - accelImg.frame.size.height)*0.5
-        accelImg.image = UIImage(named: "circle")
-        //self.view.addSubview(accelImg)
+        // center flag - notifys user of orientation
+        centerLabel.frame = CGRectMake(0, 0, screenSize.width*0.14, screenSize.height*0.08)
+        centerLabel.frame.origin.x = (screenSize.width - centerLabel.frame.size.width)*0.5
+        centerLabel.frame.origin.y = (0 - centerLabel.frame.size.height)*0.1
+        centerLabel.text = "center"
+        centerLabel.textAlignment = .Center
+        centerLabel.font = UIFont(name: "Menlo", size: 20)
+        centerLabel.textColor = UIColor.whiteColor()
+        centerLabel.backgroundColor = deepRed
+        centerLabel.layer.masksToBounds = true
+        centerLabel.layer.cornerRadius = 10
+        self.view.addSubview(centerLabel)
         
         let imgDiff = screenSize.width/5
         
-        var leftImage: UIImageView = UIImageView()
-        leftImage.frame = CGRectMake(0, 0, screenSize.width/3, screenSize.height/2.8)
-        leftImage.frame.origin.x = (screenSize.width - leftImage.frame.size.width)*0.5 - imgDiff
-        leftImage.frame.origin.y = (screenSize.height - leftImage.frame.size.height)*0.5
-        leftImage.image = UIImage(named: "taco.png")
-        //self.view.addSubview(leftImage)
+        listenVolumeButton()
         
-        var rightImage: UIImageView = UIImageView()
-        rightImage.frame = CGRectMake(0, 0, screenSize.width/3, screenSize.height/2.8)
-        rightImage.frame.origin.x = (screenSize.width - rightImage.frame.size.width)*0.5 + imgDiff
-        rightImage.frame.origin.y = (screenSize.height - rightImage.frame.size.height)*0.5
-        rightImage.image = UIImage(named: "taco.png")
-        //self.view.addSubview(rightImage)
+        // alert when close to walls
+        alertImg.frame = CGRectMake(0, 0, screenSize.width*0.25, screenSize.width * 0.23)
+        alertImg.frame.origin.x = (screenSize.width - alertImg.frame.size.width)*0.5
+        alertImg.frame.origin.y = (screenSize.height - alertImg.frame.size.height)*0.5
+        alertImg.image = UIImage(named: "alert")
         
-        var cardBoardView: UIImageView = UIImageView()
-        cardBoardView.frame = CGRectMake(0, 0, screenSize.width, screenSize.height)
-        cardBoardView.frame.origin.x = (screenSize.width - cardBoardView.frame.size.width)*0.5
-        cardBoardView.frame.origin.y = (screenSize.height - cardBoardView.frame.size.height)*0.5
-        cardBoardView.image = UIImage(named: "cardboard.png")
-        //self.view.addSubview(cardBoardView)
+        blinkImg.frame = CGRectMake(0, 0, screenSize.width, screenSize.height*0.1)
+        blinkImg.frame.origin.x = 0
+        blinkImg.frame.origin.y = -screenSize.height*0.1
+        blinkImg.backgroundColor = UIColor.blackColor()
+        self.view.addSubview(blinkImg)
         
+
     }
     
     override func didReceiveMemoryWarning() {
@@ -306,33 +330,16 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
                 currentOrientation -= 360
             }
         }
-        let diff = currentOrientation - centerOrientation
-        var ard = (diff * (160/200)) + 80
-        if ard < 0 {
-            ard = 0
-        }
-        else if ard > 160 {
-            ard = 160
-        }
-        ard = round(100 * ard) / 100
-        self.accelImg.frame.origin.x = -self.accelImg.frame.size.width/2 + (CGFloat(ard)/160) * screenSize.width
-        if !disconnected {
-            if (ard - pastXServoVal > 1 || ard - pastXServoVal < -1) {
-                var (sendSuccess, sendErrmsg) = client.send(str:"x/\(ard)/")
-                pastXServoVal = ard
-            }
-        }
+        orientationDiff = currentOrientation - centerOrientation
         
     }
     
-    //******************
-    // private methods
-    //******************
-    
+    // click back
     func back(sender:UIButton!) {
         self.navigationController?.popToRootViewControllerAnimated(true)
     }
     
+    // refresh orientation to center
     func refreshAction(sender:UIButton!) {
         readOrientation = 0
         trueHeading = !trueHeading
@@ -345,6 +352,7 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         
     }
     
+    // connect to arduino
     func startConnection(sender:UIButton!) {
         if disconnected {
             var (success, errmsg) = client.connect(timeout: 10)
@@ -354,6 +362,7 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         }
     }
     
+    // disconnect from arduino
     func stopConnection(sender:UIButton!) {
         var (success, errmsg) = client.send(str:"stop/")
         print("disconnect success: \(success)")
@@ -361,6 +370,7 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         streamingController.stop()
     }
     
+    // app terminated: disconnect
     func leavingApp(sender: AnyObject!) {
         print("leaving App")
         var (success, errmsg) = client.send(str:"stop/")
@@ -369,6 +379,7 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         streamingController.stop()
     }
     
+    // app opened: connect
     func enterApp(sender: AnyObject!) {
         print("entering App")
         if disconnected {
@@ -376,23 +387,26 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
             print("connect success: \(success)")
             disconnected = false
             streamingController.play(url: videoUrl!)
+            listenVolumeButton()
         }
     }
     
+    // adjusting steering slider
     func grabbingSteeringSlider(sender:UISlider!) {
         if (sender.value > 0.51) {
-            sender.minimumTrackTintColor = UIColor.blueColor()
-            sender.maximumTrackTintColor = UIColor.redColor()
+            sender.minimumTrackTintColor = deepRed
+            sender.maximumTrackTintColor = UIColor.lightGrayColor()
             steeringImg.image = UIImage(named: "rightturn")
         }
         else if (sender.value < 0.49) {
-            sender.minimumTrackTintColor = UIColor.redColor()
-            sender.maximumTrackTintColor = UIColor.blueColor()
+            sender.minimumTrackTintColor = UIColor.lightGrayColor()
+            sender.maximumTrackTintColor = deepRed
             steeringImg.image = UIImage(named: "leftturn")
         }
         
+        // send info to arduino
         if !disconnected {
-            if (pastSteeringVal - steeringSlider.value > 0.02 || pastSteeringVal - steeringSlider.value < -0.02) {
+            if (pastSteeringVal - steeringSlider.value > 0.04 || pastSteeringVal - steeringSlider.value < -0.04) {
                 let steeringVal = Int(((steeringSlider.value) * 142.8) + 127.5)
                 if steeringVal > 255 {
                     var (sendSuccess, sendErrmsg) = client.send(str:"s/254/")
@@ -406,6 +420,7 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         
     }
     
+    // let go of steering: recenter wheels
     func releaseSteeringSlider(sender:UISlider!) {
         UIView.animateWithDuration(0.4, delay: 0.0, options: .CurveEaseInOut, animations: {
             sender.setValue(0.5, animated: true) },
@@ -413,30 +428,35 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         sender.maximumTrackTintColor = UIColor.lightGrayColor()
         sender.minimumTrackTintColor = UIColor.lightGrayColor()
         steeringImg.image = UIImage(named: "straight2")
-        
+        // send info to arduino
         if !disconnected {
             var (sendSuccess, sendErrmsg) = client.send(str:"s/198.9/")
             pastSteeringVal =  0.5
         }
     }
     
-    
+    // adjusting speed
     func grabbingSpeedSlider(sender:UISlider!) {
-        if (sender.value > 0.1) {
-            speedLabel.text = String(format: "%.1f ft/sec", 1.5 + (sender.value-0.1)*7.22222)
+        if (sender.value > 0.2) {
+            speedLabel.text = String(format: "%.1f ft/sec", 3 + (sender.value * 3))
         }
         else {
             speedLabel.text = String(format: "%.1f ft/sec", 0.0)
         }
+        // send info to arduino
         if !disconnected {
             if (pastSpeedVal - speedSlider.value > 0.02 || pastSpeedVal - speedSlider.value < -0.02) {
-                let speedVal = Int(((speedSlider.value) * 126) + 1)
+                var speedVal = Int(((speedSlider.value) * 50) + 1)
+                if inReverse {
+                    speedVal += 77
+                }
                 var (sendSuccess, sendErrmsg) = client.send(str:"d/\(speedVal)/")
                 pastSpeedVal =  speedSlider.value
             }
         }
     }
     
+    // release speed control: stop car
     func releaseSpeedSlider(sender:UISlider!) {
         UIView.animateWithDuration(0.4, delay: 0.0, options: .CurveEaseInOut, animations: {
             sender.setValue(0.0, animated: true) },
@@ -444,9 +464,188 @@ class DriveViewController: UIViewController, CLLocationManagerDelegate {
         speedLabel.text = "0.0 ft/sec"
         
         if !disconnected {
-            var (sendSuccess, sendErrmsg) = client.send(str:"d/1/")
+            if inReverse {
+                var (sendSuccess, sendErrmsg) = client.send(str:"d/78/")
+            }
+            else {
+                var (sendSuccess, sendErrmsg) = client.send(str:"d/1/")
+            }
             pastSpeedVal =  0
         }
+    }
+    
+    // read ping information
+    func readData() {
+        // request read from socket
+        var (sendSuccess, sendErrmsg) = client.send(str:"r/0")
+        if sendSuccess {
+            // read 4 bytes
+            let data1 = client.read(1024*10)
+            var val1: [UInt8] = [0]
+            var val2: [UInt8] = [0]
+            var byteArray : [UInt8] = [0, 0, 0, 0]
+            if let d1 = data1 {
+                byteArray[3] = d1[0]
+            }
+            let data2 = client.read(1024*10)
+            if let d2 = data2 {
+                byteArray[2] = d2[0]
+            }
+            var value = byteArray.withUnsafeBufferPointer({
+                UnsafePointer<UInt32>($0.baseAddress).memory
+            })
+            value = UInt32(bigEndian: value)
+            //alert and vibrate if close to wall
+            if allowVibration && value < 4000 {
+                AudioServicesPlayAlertSound(kSystemSoundID_Vibrate)
+                vibrationTimer  = NSTimer.scheduledTimerWithTimeInterval(0.25, target: self, selector: "vibrate", userInfo: nil, repeats: true)
+                allowVibration = false
+                self.view.addSubview(alertImg)
+                UIView.animateWithDuration(1, animations: { () -> Void in
+                    self.alertImg.transform = CGAffineTransformMakeScale(1.5, 1.5)
+                }) { (finished: Bool) -> Void in
+                    UIView.animateWithDuration(1, animations: { () -> Void in
+                        self.alertImg.transform = CGAffineTransformIdentity
+                    })}
+                animateTimer = NSTimer.scheduledTimerWithTimeInterval(2, target: self, selector: "animateAlert", userInfo: nil, repeats: true)
+                alertCount = 0
+            }
+            else if !allowVibration && value > 4150 {
+                alertCount++
+            }
+            if alertCount == 3 {
+                alertImg.removeFromSuperview()
+                animateTimer.invalidate()
+                allowVibration = true
+                alertCount = 0
+            }
+        }
+    }
+    
+    // update servo values based on device posiitoning
+    func updateServos() {
+        var ardX = 77 - (orientationDiff * (154/200))
+        if ardX < 0 {
+            ardX = 0
+        }
+        else if ardX > 154 {
+            ardX = 154
+        }
+        ardX = round(100 * ardX) / 100
+        // send info to arduino
+        self.centerLabel.frame.origin.x = -self.centerLabel.frame.size.width/2 + (CGFloat(ardX)/154) * screenSize.width
+        if !disconnected {
+            if (ardX - pastXServoVal > 2 || ardX - pastXServoVal < -2) {
+                var (sendSuccess, sendErrmsg) = client.send(str:"x/\(ardX)/")
+                pastXServoVal = ardX
+                print("xServo: \(ardX)")
+                //print("xservo: \(ardX)")
+            }
+        }
+
+        var ardY = (1 - (zGravity)) * 70
+        if ardY < 0 {
+            ardY = 0
+        }
+        else if ardX > 160 {
+            ardX = 160
+        }
+        ardY = round(100 * ardY) / 100
+        // send info to arduino
+        if !self.disconnected {
+            if (ardY - self.pastYServoVal > 2 || ardY - self.pastYServoVal < -2) {
+                var (sendSuccess, sendErrmsg) = self.client.send(str:"y/\(ardY)/")
+                self.pastYServoVal = ardY
+                //print("xservo: \(ardX)")
+            }
+        }
+        //self.quaternion = motion!.attitude.quaternion
+        //self.tilt = motion!.gravity.y
+        
+        
+    }
+    
+    // volume rocker notification
+    func listenVolumeButton(){
+        if let view = volumeView.subviews.first as? UISlider{
+            view.value = 0.0 //---0 t0 1.0---
+            
+        }
+        volumeView.showsVolumeSlider = false
+        let audioSession = AVAudioSession.sharedInstance()
+        startVolume = 0
+        do {
+            try audioSession.setActive(true)
+        } catch _ {
+            
+        }
+        audioSession.addObserver(self, forKeyPath: "outputVolume",
+                                 options: NSKeyValueObservingOptions.New, context: nil)
+    }
+    
+    // volume rocker notification
+    override func observeValueForKeyPath(keyPath: String?, ofObject object: AnyObject?, change: [String : AnyObject]?, context: UnsafeMutablePointer<Void>) {
+        if keyPath == "outputVolume"{
+            let volume = AVAudioSession.sharedInstance().outputVolume
+            print("\(startVolume) \(volume)")
+            videoImage.frame.size.width = screenSize.width * (1 + 3 * CGFloat(volume))
+            videoImage.frame.size.height = screenSize.width * (3/4) * (1 + 3 * CGFloat(volume))
+            videoImage.frame.origin.x = (screenSize.width - videoImage.frame.size.width)/2
+            videoImage.frame.origin.y = (screenSize.height - videoImage.frame.size.height)/2
+        }
+    }
+    
+    // alert animation
+    func animateAlert() {
+        UIView.animateWithDuration(1, animations: { () -> Void in
+            self.alertImg.transform = CGAffineTransformMakeScale(1.5, 1.5)
+        }) { (finished: Bool) -> Void in
+            UIView.animateWithDuration(1, animations: { () -> Void in
+                self.alertImg.transform = CGAffineTransformIdentity
+            })}
+    }
+    
+    //create vibration
+    func vibrate() {
+        AudioServicesPlayAlertSound(kSystemSoundID_Vibrate)
+        vibrationCount++
+        if vibrationCount == 2 {
+            vibrationCount = 0
+            vibrationTimer.invalidate()
+        }
+    }
+    
+    // user clicks reverse button: alert the car
+    func reverseAction(sender:UIButton!) {
+        // put in front drive
+        if inReverse {
+            alertImg.alpha = 1.0
+            reverseButton.setImage(UIImage(named: "reverse1"), forState: UIControlState.Normal)
+            inReverse = false
+            var (sendSuccess, sendErrmsg) = client.send(str:"z/0/")
+            (sendSuccess, sendErrmsg) = client.send(str:"d/1/")
+        }
+        // put in reverse drive
+        else {
+            alertImg.alpha = 0.0
+            reverseButton.setImage(UIImage(named: "reverse2"), forState: UIControlState.Normal)
+            inReverse = true
+            var (sendSuccess, sendErrmsg) = client.send(str:"z/160/")
+            (sendSuccess, sendErrmsg) = client.send(str:"d/78/")
+        }
+        blinkImg.alpha = 1.0
+        UIView.animateWithDuration(0.4, animations: { () -> Void in
+            self.blinkImg.transform = CGAffineTransformMakeScale(24, 24)
+        }) { (finished: Bool) -> Void in
+            UIView.animateWithDuration(0.4, animations: { () -> Void in
+                self.blinkImg.transform = CGAffineTransformIdentity
+            })}
+        let blinkTimer = NSTimer.scheduledTimerWithTimeInterval(0.8, target: self, selector: "blink", userInfo: nil, repeats: false)
+    }
+    
+    
+    func blink() {
+        blinkImg.alpha = 0.0
     }
     
 }

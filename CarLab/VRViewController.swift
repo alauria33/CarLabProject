@@ -10,6 +10,9 @@ import UIKit
 import CoreMotion
 import CoreLocation
 import Foundation
+import AVFoundation
+import MediaPlayer
+import AudioToolbox
 
 class VRViewController: UIViewController, CLLocationManagerDelegate {
     
@@ -57,6 +60,26 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
     var client:TCPClient = TCPClient()//addr: "192.168.240.1", port: 5678)
     
     var disconnected: Bool = true
+    
+    var trueHeading: Bool = true
+    var quaternion: CMQuaternion = CMQuaternion()
+    
+    var tilt: Double = 0.0
+    
+    var orientationDiff: CLLocationDirection = CLLocationDirection()
+    var zGravity: Double = Double()
+    
+    var startVolume: Float = Float()
+    let volumeView = MPVolumeView()
+    
+    let alertImg: UIImageView = UIImageView()
+    
+    var allowVibration: Bool = true
+    var animateTimer: NSTimer = NSTimer()
+    var vibrationTimer: NSTimer = NSTimer()
+    var vibrationCount: Int = 0
+    var alertCount: Int = 0
+    
     //******************
     // lifecycle methods
     //******************
@@ -65,11 +88,21 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
         
-        self.view.backgroundColor = deepRed
+        self.view.backgroundColor = UIColor.whiteColor()//deepRed
+        
+        let volumeView: MPVolumeView = MPVolumeView()
+        volumeView.hidden = false
+        volumeView.sizeToFit()
+        volumeView.frame = CGRectMake(screenSize.width, screenSize.height, 0, 0)
+        self.view.addSubview(volumeView)
         
         NSNotificationCenter.defaultCenter().addObserver(self, selector: Selector("leavingApp:"), name:UIApplicationDidEnterBackgroundNotification, object: nil)
         NSNotificationCenter.defaultCenter().addObserver(self, selector: Selector("leavingApp:"), name:UIApplicationWillTerminateNotification, object: nil)
         NSNotificationCenter.defaultCenter().addObserver(self, selector: Selector("enterApp:"), name:UIApplicationDidBecomeActiveNotification, object: nil)
+        
+        let servoTimer = NSTimer.scheduledTimerWithTimeInterval(0.035, target: self, selector: "updateServos", userInfo: nil, repeats: true)
+        
+        let readTimer = NSTimer.scheduledTimerWithTimeInterval(0.2, target: self, selector: "readData", userInfo: nil, repeats: true)
         
         // Video
         let videoSize = 1
@@ -98,38 +131,15 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
                 var (sendSuccess, sendErrmsg) = client.send(str:"Start")
             }
             streamingController.play(url: videoUrl!)
-        }
-        
-        loadingIndicator.frame = CGRectMake(0, 0, screenSize.width * 0.4, screenSize.width * 0.4)
-        loadingIndicator.frame.origin.x = (screenSize.width - loadingIndicator.frame.size.width)*0.5
-        loadingIndicator.frame.origin.y = (screenSize.height - loadingIndicator.frame.size.height)*0.5
-        loadingIndicator.transform = CGAffineTransformMakeScale(5, 5)
-        //self.view.addSubview(loadingIndicator)
-        
-        streamingController.didStartLoading = { [unowned self] in
-            self.loadingIndicator.hidden = false
-            self.loadingIndicator.startAnimating()
-        }
-        streamingController.didFinishLoading = { [unowned self] in
-            self.loadingIndicator.stopAnimating()
-            self.loadingIndicator.hidden = true
+            print("done vid")
         }
         
         motionManager = CMMotionManager()
         motionManager.startAccelerometerUpdates()
         motionManager.startGyroUpdates()
-        
         // vertical motion
         let handler: CMDeviceMotionHandler = {(motion: CMDeviceMotion?, error: NSError?) -> Void in
-            var ard = (1 - (motion?.gravity.z)!) * 75
-            ard = round(100 * ard) / 100
-            self.accelImg.frame.origin.y = -self.accelImg.frame.size.height/2 + CGFloat(ard)/150 * screenSize.height
-            if !self.disconnected {
-                if (ard - self.pastYServoVal > 4 || ard - self.pastYServoVal < -4) {
-                    var (sendSuccess, sendErrmsg) = self.client.send(str:"y/\(ard)/")
-                    self.pastYServoVal = ard
-                }
-            }
+            self.zGravity = (motion?.gravity.z)!
         }
         
         // check if accelerometer and gyro are available
@@ -140,6 +150,7 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
         }
         
         lm = CLLocationManager()
+        lm.headingOrientation = CLDeviceOrientation.LandscapeLeft
         lm.delegate = self
         lm.startUpdatingHeading()
         readOrientation = 0
@@ -188,48 +199,11 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
         backArrow.tintColor = UIColor.blackColor()
         self.view.addSubview(backArrow)
         
-        // steering slider
-        steeringSlider.frame.size.width = screenSize.width*0.4
-        steeringSlider.frame.origin.x = (screenSize.width - steeringSlider.frame.size.width)*0.14
-        steeringSlider.frame.origin.y = (screenSize.height - steeringSlider.frame.size.height)*0.9
-        steeringSlider.addTarget(self, action: "grabbingSteeringSlider:", forControlEvents: UIControlEvents.TouchDragInside)
-        steeringSlider.addTarget(self, action: "releaseSteeringSlider:", forControlEvents: UIControlEvents.TouchUpInside)
-        steeringSlider.addTarget(self, action: "releaseSteeringSlider:", forControlEvents: UIControlEvents.TouchUpOutside)
-        steeringSlider.setValue(0.5, animated: false)
-        steeringSlider.maximumTrackTintColor = UIColor.lightGrayColor()
-        steeringSlider.minimumTrackTintColor = UIColor.lightGrayColor()
-        self.view.addSubview(steeringSlider)
-        
-        steeringImg.frame = CGRectMake(0, 0, steeringSlider.frame.size.width*0.15, steeringSlider.frame.size.width * 0.15)
-        steeringImg.frame.origin.x = steeringSlider.frame.origin.x + steeringSlider.frame.size.width + steeringImg.frame.width/10
-        steeringImg.frame.origin.y = (steeringSlider.frame.origin.y - steeringSlider.frame.height/4)
-        steeringImg.image = UIImage(named: "straight2")
-        self.view.addSubview(steeringImg)
-        
-        // speed slider
-        speedSlider.transform = CGAffineTransformMakeRotation(CGFloat(-M_PI_2))
-        speedSlider.frame.size.height = screenSize.height*0.6
-        speedSlider.frame.origin.x = (screenSize.width - speedSlider.frame.size.width)*0.9
-        speedSlider.frame.origin.y = (screenSize.height - speedSlider.frame.size.height)*0.7
-        speedSlider.addTarget(self, action: "grabbingSpeedSlider:", forControlEvents: UIControlEvents.TouchDragInside)
-        speedSlider.addTarget(self, action: "releaseSpeedSlider:", forControlEvents: UIControlEvents.TouchUpInside)
-        speedSlider.addTarget(self, action: "releaseSpeedSlider:", forControlEvents: UIControlEvents.TouchUpOutside)
-        speedSlider.minimumTrackTintColor = UIColor.purpleColor()
-        speedSlider.maximumTrackTintColor = UIColor.lightGrayColor()
-        self.view.addSubview(speedSlider)
-        
-        speedLabel.text = "0.0 ft/sec"
-        speedLabel.font = UIFont(name: "Menlo", size: 18)
-        speedLabel.frame = CGRectMake(0, 0, screenSize.width*0.2, screenSize.height * 0.15)
-        speedLabel.frame.origin.x = speedSlider.frame.origin.x - speedSlider.frame.size.width
-        speedLabel.frame.origin.y = speedSlider.frame.origin.y + speedSlider.frame.size.height/2 + screenSize.height/3.7
-        self.view.addSubview(speedLabel)
-        
         accelImg.frame = CGRectMake(0, 0, screenSize.width*0.06, screenSize.width * 0.06)
         accelImg.frame.origin.x = (screenSize.width - accelImg.frame.size.width)*0.5
         accelImg.frame.origin.y = (screenSize.height - accelImg.frame.size.height)*0.5
         accelImg.image = UIImage(named: "circle")
-        self.view.addSubview(accelImg)
+        //self.view.addSubview(accelImg)
         
         let imgDiff = screenSize.width/5
         
@@ -254,6 +228,14 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
         cardBoardView.image = UIImage(named: "cardboard.png")
         //self.view.addSubview(cardBoardView)
         
+        listenVolumeButton()
+        
+        alertImg.frame = CGRectMake(0, 0, screenSize.width*0.25, screenSize.width * 0.23)
+        alertImg.frame.origin.x = (screenSize.width - alertImg.frame.size.width)*0.5
+        alertImg.frame.origin.y = (screenSize.height - alertImg.frame.size.height)*0.5
+        alertImg.image = UIImage(named: "alert")
+        
+        
     }
     
     override func didReceiveMemoryWarning() {
@@ -267,6 +249,19 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
     
     // horizontal motion
     func locationManager(manager: CLLocationManager!, didUpdateHeading newHeading: CLHeading!) {
+        var tiltDiff: Double = 0.0
+        if tilt < 0 {
+            tiltDiff = 0.5 - abs(-0.5 - tilt)
+        }
+        else if tilt > 0 {
+            tiltDiff = 0.5 - abs(0.5 - tilt)
+        }
+        //print(tiltDiff)
+        var fixed = (newHeading.trueHeading - (tilt*90))%360
+        if fixed < 0 {
+            fixed += 360
+        }
+        //print("mag: \(newHeading.trueHeading) , tilt: \(tilt) , fixed: \(fixed))")
         if readOrientation == 0 {
             centerOrientation = newHeading.magneticHeading
             readOrientation = 1
@@ -283,23 +278,7 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
                 currentOrientation -= 360
             }
         }
-        let diff = currentOrientation - centerOrientation
-        var ard = (diff * (180/200)) + 90
-        if ard < 0 {
-            ard = 0
-        }
-        else if ard > 180 {
-            ard = 180
-        }
-        ard = round(100 * ard) / 100
-        self.accelImg.frame.origin.x = -self.accelImg.frame.size.width/2 + (CGFloat(ard)/180) * screenSize.width
-        if !disconnected {
-            if (ard - pastXServoVal > 3 || ard - pastXServoVal < -3) {
-                var (sendSuccess, sendErrmsg) = client.send(str:"x/\(ard)/")
-                print(ard)
-                pastXServoVal = ard
-            }
-        }
+        orientationDiff = currentOrientation - centerOrientation
         
     }
     
@@ -313,7 +292,7 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
     
     func refreshAction(sender:UIButton!) {
         readOrientation = 0
-        
+        trueHeading = !trueHeading
         if TempVal == 180 {
             TempVal = 0
         }
@@ -333,7 +312,7 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
     }
     
     func stopConnection(sender:UIButton!) {
-        var (success, errmsg) = client.send(str:"stop")
+        var (success, errmsg) = client.send(str:"stop/")
         print("disconnect success: \(success)")
         disconnected = true
         streamingController.stop()
@@ -341,7 +320,7 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
     
     func leavingApp(sender: AnyObject!) {
         print("leaving App")
-        var (success, errmsg) = client.send(str:"stop")
+        var (success, errmsg) = client.send(str:"stop/")
         print("disconnect success: \(success)")
         disconnected = true
         streamingController.stop()
@@ -354,76 +333,139 @@ class VRViewController: UIViewController, CLLocationManagerDelegate {
             print("connect success: \(success)")
             disconnected = false
             streamingController.play(url: videoUrl!)
+            listenVolumeButton()
         }
     }
     
-    func grabbingSteeringSlider(sender:UISlider!) {
-        if (sender.value > 0.51) {
-            sender.minimumTrackTintColor = UIColor.blueColor()
-            sender.maximumTrackTintColor = UIColor.redColor()
-            steeringImg.image = UIImage(named: "rightturn")
-        }
-        else if (sender.value < 0.49) {
-            sender.minimumTrackTintColor = UIColor.redColor()
-            sender.maximumTrackTintColor = UIColor.blueColor()
-            steeringImg.image = UIImage(named: "leftturn")
-        }
-        
-        if !disconnected {
-            if (pastSteeringVal - steeringSlider.value > 0.02 || pastSteeringVal - steeringSlider.value < -0.02) {
-                let steeringVal = Int(((steeringSlider.value) * 142.8) + 127.5)
-                if steeringVal > 255 {
-                    var (sendSuccess, sendErrmsg) = client.send(str:"s/254/")
-                }
-                else {
-                    var (sendSuccess, sendErrmsg) = client.send(str:"s/\(steeringVal)/")
-                }
-                pastSteeringVal =  steeringSlider.value
+    func readData() {
+        var (sendSuccess, sendErrmsg) = client.send(str:"r/0")
+        if sendSuccess {
+            let data1 = client.read(1024*10)
+            var val1: [UInt8] = [0]
+            var val2: [UInt8] = [0]
+            var byteArray : [UInt8] = [0, 0, 0, 0]
+            if let d1 = data1 {
+                byteArray[3] = d1[0]
             }
-        }
-        
-    }
-    
-    func releaseSteeringSlider(sender:UISlider!) {
-        UIView.animateWithDuration(0.4, delay: 0.0, options: .CurveEaseInOut, animations: {
-            sender.setValue(0.5, animated: true) },
-                                   completion: nil)
-        sender.maximumTrackTintColor = UIColor.lightGrayColor()
-        sender.minimumTrackTintColor = UIColor.lightGrayColor()
-        steeringImg.image = UIImage(named: "straight2")
-        
-        if !disconnected {
-            var (sendSuccess, sendErrmsg) = client.send(str:"s/198.9/")
-            pastSteeringVal =  0.5
-        }
-    }
-    
-    
-    func grabbingSpeedSlider(sender:UISlider!) {
-        if (sender.value > 0.1) {
-            speedLabel.text = String(format: "%.1f ft/sec", 1.5 + (sender.value-0.1)*7.22222)
-        }
-        else {
-            speedLabel.text = String(format: "%.1f ft/sec", 0.0)
-        }
-        if !disconnected {
-            if (pastSpeedVal - speedSlider.value > 0.02 || pastSpeedVal - speedSlider.value < -0.02) {
-                let speedVal = Int(((speedSlider.value) * 126) + 1)
-                var (sendSuccess, sendErrmsg) = client.send(str:"d/\(speedVal)/")
-                pastSpeedVal =  speedSlider.value
+            let data2 = client.read(1024*10)
+            if let d2 = data2 {
+                byteArray[2] = d2[0]
+            }
+            var value = byteArray.withUnsafeBufferPointer({
+                UnsafePointer<UInt32>($0.baseAddress).memory
+            })
+            value = UInt32(bigEndian: value)
+            print(value)
+            if allowVibration && value < 1200 {
+                AudioServicesPlayAlertSound(kSystemSoundID_Vibrate)
+                vibrationTimer  = NSTimer.scheduledTimerWithTimeInterval(0.25, target: self, selector: "vibrate", userInfo: nil, repeats: true)
+                allowVibration = false
+                self.view.addSubview(alertImg)
+                UIView.animateWithDuration(1, animations: { () -> Void in
+                    self.alertImg.transform = CGAffineTransformMakeScale(1.5, 1.5)
+                }) { (finished: Bool) -> Void in
+                    UIView.animateWithDuration(1, animations: { () -> Void in
+                        self.alertImg.transform = CGAffineTransformIdentity
+                    })}
+                animateTimer = NSTimer.scheduledTimerWithTimeInterval(2, target: self, selector: "animateAlert", userInfo: nil, repeats: true)
+                alertCount = 0
+            }
+            else if !allowVibration && value > 1400 {
+                alertCount++
+            }
+            if alertCount == 3 {
+                alertImg.removeFromSuperview()
+                animateTimer.invalidate()
+                allowVibration = true
+                alertCount = 0
             }
         }
     }
     
-    func releaseSpeedSlider(sender:UISlider!) {
-        UIView.animateWithDuration(0.4, delay: 0.0, options: .CurveEaseInOut, animations: {
-            sender.setValue(0.0, animated: true) },
-                                   completion: nil)
-        speedLabel.text = "0.0 ft/sec"
-        
+    func updateServos() {
+        var ardX = 83 - (orientationDiff * (166/200))
+        if ardX < 0 {
+            ardX = 0
+        }
+        else if ardX > 166 {
+            ardX = 166
+        }
+        ardX = round(100 * ardX) / 100
+        self.accelImg.frame.origin.x = -self.accelImg.frame.size.width/2 + (CGFloat(ardX)/160) * screenSize.width
         if !disconnected {
-            var (sendSuccess, sendErrmsg) = client.send(str:"d/1/")
-            pastSpeedVal =  0
+            if (ardX - pastXServoVal > 1 || ardX - pastXServoVal < -1) {
+                var (sendSuccess, sendErrmsg) = client.send(str:"x/\(ardX)/")
+                pastXServoVal = ardX
+                //print("xservo: \(ardX)")
+            }
+        }
+        
+        var ardY = (1 - (zGravity)) * 70
+        if ardY < 0 {
+            ardY = 0
+        }
+        else if ardX > 160 {
+            ardX = 160
+        }
+        ardY = round(100 * ardY) / 100
+        //self.accelImg.frame.origin.y = -self.accelImg.frame.size.height/2 + CGFloat(ard)/150 * screenSize.height
+        if !self.disconnected {
+            if (ardY - self.pastYServoVal > 1 || ardY - self.pastYServoVal < -1) {
+                var (sendSuccess, sendErrmsg) = self.client.send(str:"y/\(ardY)/")
+                self.pastYServoVal = ardY
+                //print("xservo: \(ardX)")
+            }
+        }
+        //self.quaternion = motion!.attitude.quaternion
+        //self.tilt = motion!.gravity.y
+        
+        
+    }
+    
+    func listenVolumeButton(){
+        
+        if let view = volumeView.subviews.first as? UISlider{
+            view.value = 0.0 //---0 t0 1.0---
+            
+        }
+        volumeView.showsVolumeSlider = false
+        let audioSession = AVAudioSession.sharedInstance()
+        startVolume = 0
+        do {
+            try audioSession.setActive(true)
+        } catch _ {
+            
+        }
+        audioSession.addObserver(self, forKeyPath: "outputVolume",
+                                 options: NSKeyValueObservingOptions.New, context: nil)
+    }
+    
+    override func observeValueForKeyPath(keyPath: String?, ofObject object: AnyObject?, change: [String : AnyObject]?, context: UnsafeMutablePointer<Void>) {
+        if keyPath == "outputVolume"{
+            let volume = AVAudioSession.sharedInstance().outputVolume
+            print("\(startVolume) \(volume)")
+            videoImage.frame.size.width = screenSize.width * (1 + 3 * CGFloat(volume))
+            videoImage.frame.size.height = screenSize.width * (3/4) * (1 + 3 * CGFloat(volume))
+            videoImage.frame.origin.x = (screenSize.width - videoImage.frame.size.width)/2
+            videoImage.frame.origin.y = (screenSize.height - videoImage.frame.size.height)/2
+        }
+    }
+    
+    func animateAlert() {
+        UIView.animateWithDuration(1, animations: { () -> Void in
+            self.alertImg.transform = CGAffineTransformMakeScale(1.5, 1.5)
+        }) { (finished: Bool) -> Void in
+            UIView.animateWithDuration(1, animations: { () -> Void in
+                self.alertImg.transform = CGAffineTransformIdentity
+            })}
+    }
+    
+    func vibrate() {
+        AudioServicesPlayAlertSound(kSystemSoundID_Vibrate)
+        vibrationCount++
+        if vibrationCount == 2 {
+            vibrationCount = 0
+            vibrationTimer.invalidate()
         }
     }
     

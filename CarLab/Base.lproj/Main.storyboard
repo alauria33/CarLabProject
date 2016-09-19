@@ -21,6 +21,7 @@
                     <navigationItem key="navigationItem" id="yhi-r9-AAQ"/>
                     <connections>
                         <segue destination="810-Rc-Ilg" kind="show" id="G4p-eE-bSr"/>
+                        <segue destination="jxU-hs-cvn" kind="show" id="HEt-ub-oGa"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="dkx-z0-nzr" sceneMemberID="firstResponder"/>
@@ -62,6 +63,24 @@
                 <placeholder placeholderIdentifier="IBFirstResponder" id="3z3-7l-u29" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="245" y="228"/>
+        </scene>
+        <!--View Controller-->
+        <scene sceneID="dNh-yZ-hvZ">
+            <objects>
+                <viewController storyboardIdentifier="viewerView" useStoryboardIdentifierAsRestorationIdentifier="YES" id="jxU-hs-cvn" customClass="VRViewController" customModule="CarLab" customModuleProvider="target" sceneMemberID="viewController">
+                    <layoutGuides>
+                        <viewControllerLayoutGuide type="top" id="94E-HY-ZQg"/>
+                        <viewControllerLayoutGuide type="bottom" id="wFe-jF-18F"/>
+                    </layoutGuides>
+                    <view key="view" contentMode="scaleToFill" id="M5n-BK-Qaw">
+                        <rect key="frame" x="0.0" y="0.0" width="600" height="600"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <color key="backgroundColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="Lku-DJ-oga" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="1691" y="1068"/>
         </scene>
     </scenes>
 </document>
